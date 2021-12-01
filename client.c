@@ -1,4 +1,7 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -6,7 +9,7 @@
 #define DEFULAT_PROTOCOL 0
 #define MAXLINE 100
 
-void readLine(int, char *);
+int readLine(int, char *);
 
 int main() {
 	int clientfd, result;
@@ -23,13 +26,14 @@ int main() {
 	} while (result == -1);
 
 	while(readLine(clientfd, outmsg)) {
+		printf(outmsg);
 		scanf("%s", inmsg);
 		write(clientfd, inmsg, strlen(inmsg)+1);
 	}
 	exit(0);
 }
 
-void readLine(int fd, char* str) 
+int readLine(int fd, char* str) 
 {
 	int n;
 	do {
