@@ -10,6 +10,7 @@
 #define MAXLINE 100
 
 int readLine(int, char *);
+void writeInfo(int, char*, char*);
 
 int main() {
 	int clientfd, result;
@@ -25,10 +26,8 @@ int main() {
 		if (result == -1) sleep(1);
 	} while (result == -1);
 
-	while(readLine(clientfd, outmsg)) {
-		printf(outmsg);
-		scanf("%s", inmsg);
-		write(clientfd, inmsg, strlen(inmsg)+1);
+	while(readLine(clientfd, inmsg)) {
+		writeInfo(clientfd, inmsg, outmsg);
 	}
 	exit(0);
 }
@@ -40,4 +39,16 @@ int readLine(int fd, char* str)
 		n = read(fd, str, 1);
 	} while(n > 0 && *str++ != '\0');
 	return (n > 0);
+}
+
+void writeInfo(int clientfd, char* inmsg, char* outmsg){
+	if(strncmp(inmsg,"?",1)==0){
+		write(clientfd, "?", 2);
+		readLine(clientfd, inmsg);
+		printf(inmsg);
+		scanf("%s", outmsg);
+		write(clientfd, outmsg, strlen(outmsg)+1);
+	}else{
+		printf(inmsg);
+	}
 }

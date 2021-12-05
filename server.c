@@ -11,7 +11,7 @@
 #define DEFAULT_PROTOCOL 0
 #define MAXLINE 100
 
-void getInfo(int, char*, char*);
+void writeInfo(int, char*, char*, int);
 
 int main(int argc, char *argv[]){
 	int fd, listenfd, connfd, clientlen;
@@ -19,7 +19,7 @@ int main(int argc, char *argv[]){
 	int lockerNum, bigNum, pwdLen;
 	struct student record;
 	struct locker * locker;
-	int id;
+	int id,menu;
 	char outmsg[MAXLINE], inmsg[MAXLINE], name[20];
 
 	signal(SIGCHLD, SIG_IGN);
@@ -40,6 +40,19 @@ int main(int argc, char *argv[]){
 	printf("사물함 관리 시스템 시작\n");
 
 	locker = (struct locker *)malloc(lockerNum * sizeof(struct locker));
+	for(int i = 0;i<lockerNum;i++){
+		locker[i].id = i;
+		if(i<bigNum){
+			locker[i].isBig = 0;
+			locker[i].cap = 5;
+		}else{
+			locker[i].isBig = 1;
+			locker[i].cap = 10;
+		}
+		locker[i].wrongCnt = 0;
+		locker[i].islock = 0;
+		locker[i].lockTime = 0;
+	}
 
 	listen(listenfd, 5);
 
@@ -50,7 +63,7 @@ int main(int argc, char *argv[]){
 				perror(argv[1]);
 				exit(2);
 			}
-			getInfo(connfd, "학번 : ", inmsg);
+			writeInfo(connfd, "학번 : ", inmsg, 1);
 			id = atoi(inmsg);
 			if(id < START_ID){
 				printf("wrong id");
@@ -59,20 +72,42 @@ int main(int argc, char *argv[]){
 			lseek(fd,(long)(id-START_ID)*sizeof(record),SEEK_SET);
 			if((read(fd,&record,sizeof(record))<0)||(record.id==0)){
 				record.id = id;
-				getInfo(connfd, "이름 : ", name);
+				writeInfo(connfd, "이름 : ", name, 1);
 				strcpy(record.name, name);
 				lseek(fd,-sizeof(record),SEEK_CUR);
 				write(fd,&record,sizeof(record));
 			}
-			printf("%s님이 로그인했습니다\n");
-			sprintf(outmsg, "안녕하세요 %s님!\n",name);
-			write(connfd, outmsg, strlen(outmsg)+1);
-			exit(0);
+			printf("%s님이 로그인했습니다\n",name);
+			while(1){
+				sprintf(outmsg, "%s\n -----메뉴-----\n 1. 사물함 신청\n 2. 내 사물함 보기\n 3. 종료\n",name);
+				writeInfo(connfd, outmsg, inmsg, 1);
+				menu = atoi(inmsg);
+				if(menu == 1){
+					writeInfo(connfd,"사물함 신청\n",inmsg, 0);
+					for(int i = 0;i<lockerNum;i++){
+						sprintf(outmsg,"id : %d, is Big : %d, cap : %d\n", locker[i].id, locker[i].isBig, locker[i].cap);
+						writeInfo(connfd, outmsg, inmsg,0);
+					}
+				}else if (menu == 2){
+					printf("내 사물함 보기\n");
+				}else if(menu == 3){
+					printf("%s님이 로그아웃했습니다\n", name);
+					exit(0);
+				}
+			}
+
 		}else close(connfd);
 	}
 }
 
-void getInfo(int connfd, char* outmsg, char* inmsg){
-	write(connfd, outmsg, strlen(outmsg)+1);
-	read(connfd, inmsg, MAXLINE);
+void writeInfo(int connfd, char* outmsg, char* inmsg, int re){
+	if(re){
+		write(connfd, "?",2);
+		read(connfd, inmsg, MAXLINE);
+		write(connfd, outmsg, strlen(outmsg) + 1);
+		read(connfd, inmsg, MAXLINE);
+	}else{
+		write(connfd, outmsg, strlen(outmsg) + 1);
+	}
 }
+
