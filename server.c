@@ -8,18 +8,19 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include "student.h"
+#include "locker.h"
 #define DEFAULT_PROTOCOL 0
 #define MAXLINE 160
 
 void writeInfo(int, char*, char*, int);
 
 int main(int argc, char *argv[]){
-	int fd, listenfd, connfd, clientlen;
+	int fd, lockfd, listenfd, connfd, clientlen;
 	struct sockaddr_un serverUNIXaddr, clientUNIXaddr;
 	int lockerNum, bigNum, pwdLen;
 	struct student record;
 	struct locker * locker;
-	int id,menu,lockerId;
+	int id,menu,lockerId,n;
 	char outmsg[MAXLINE], inmsg[MAXLINE];
 
 	signal(SIGCHLD, SIG_IGN);
@@ -39,6 +40,16 @@ int main(int argc, char *argv[]){
 	scanf("%d", &pwdLen);
 	printf("사물함 관리 시스템 시작\n");
 
+	if((fd = open(argv[1], O_CREAT|O_TRUNC, 0640))==-1){
+		perror(argv[1]);
+		exit(2);
+	}
+	close(fd);
+	if((lockfd = open(argv[2], O_RDWR|O_CREAT, 0640)) == -1){
+		perror(argv[2]);
+		exit(2);
+	}
+
 	locker = (struct locker *)malloc(lockerNum * sizeof(struct locker));
 	for(int i = 0;i<lockerNum;i++){
 		locker[i].id = i+1;
@@ -49,21 +60,25 @@ int main(int argc, char *argv[]){
 			locker[i].isBig = 1;
 			locker[i].cap = 10;
 		}
-		locker[i].pwd = (char*)malloc(pwdLen*sizeof(char));
+		locker[i].pwd[0] = '\0';
 		locker[i].wrongCnt = 0;
 		locker[i].islock = 0;
 		locker[i].lockTime = 0;
+		lseek(lockfd,i*sizeof(struct locker),SEEK_SET);
+		write(lockfd,&locker[i],sizeof(struct locker));
 	}
+	close(lockfd);
 
 	listen(listenfd, 5);
 
 	while(1){
 		connfd = accept(listenfd, &clientUNIXaddr, &clientlen);
 		if(fork() == 0){
-			if((fd = open(argv[1], O_RDWR|O_CREAT, 0640)) == -1){
+			if((fd = open(argv[1], O_RDWR)) == -1){
                         	perror(argv[1]);
                         	exit(2);
 			}
+			
 			writeInfo(connfd, "학번 : ", inmsg, 1);
 			id = atoi(inmsg);
 			if(id < START_ID){
@@ -72,7 +87,7 @@ int main(int argc, char *argv[]){
 			}
 			printf("id : %d\n", id);
 			lseek(fd,(id-START_ID)*sizeof(record),SEEK_SET);
-			int n = read(fd, &record, sizeof(record));
+			n = read(fd, &record, sizeof(record));
 			printf("n : %d\n", n);
 			if(n<=0||record.id==0){
 				printf("norecord\n");
@@ -85,8 +100,19 @@ int main(int argc, char *argv[]){
 				printf("record : %d\t %s\n", record.id,record.name);
 			}
 			printf("%s님이 로그인했습니다\n",record.name);
+			printf("사물함 번호 : %d\n",record.lockerId);
 			while(1){
-				sprintf(outmsg, "-----메뉴-----\n 1. 사물함 신청\n 2. 사물함 관리\n 3. 종료\n");
+				if((lockfd = open(argv[2], O_RDWR)) == -1){
+					perror(argv[2]);
+					exit(2);
+				}
+				for(int i = 0;i<lockerNum;i++){
+                	                lseek(lockfd,i*sizeof(struct locker),SEEK_SET);
+        	                        n = read(lockfd, &locker[i], sizeof(struct locker));
+                        	        printf("%d %d %s\n", n, locker[i].id, locker[i].pwd);
+	                        }
+
+				sprintf(outmsg, "-----메뉴-----\n 1. 사물함 신청\n 2. 내 사물함 보기\n 3. 종료\n");
 				writeInfo(connfd, outmsg, inmsg, 1);
 				menu = atoi(inmsg);
 				if(menu == 1){
@@ -106,21 +132,25 @@ int main(int argc, char *argv[]){
 
 					}while(strlen(inmsg)!=pwdLen);
 					strncpy(locker[lockerId].pwd, inmsg,pwdLen);
-					record.myLocker = locker[lockerId];
+					lseek(lockfd, lockerId*sizeof(struct locker),SEEK_SET);
+					write(lockfd, &locker[lockerId], sizeof(struct locker));
+					record.lockerId = lockerId;
 					lseek(fd,-sizeof(record),SEEK_CUR);
 					write(fd,&record,sizeof(record));
-					printf("%d\t %s\t %d\t %s\n",record.id, record.name, record.myLocker.id, record.myLocker.pwd);
+					printf("%d\t %s\t %d\t %d\t %s\n",record.id, record.name, record.lockerId, locker[record.lockerId].id, locker[record.lockerId].pwd);
 				}else if (menu == 2){
 					printf("내 사물함 보기\n");
 					writeInfo(connfd, "비밀번호 : ", inmsg, 1);
-					if(strcmp(record.myLocker.pwd, inmsg)==0){
-						lockerInquiry(connfd, pwdLen, &record);
+
+					if(strcmp(locker[record.lockerId].pwd, inmsg)==0){
+						lockerInquiry(connfd, pwdLen, &locker[record.lockerId]);
 
 					}else{
 						writeInfo(connfd, "비밀번호가 맞지않습니다.\n", inmsg, 0);
 					}
 				}else if(menu == 3){
 					printf("%s님이 로그아웃했습니다\n", record.name);
+					close(lockfd);
 					close(fd);
 					exit(0);
 				}
@@ -144,28 +174,28 @@ void writeInfo(int connfd, char* outmsg, char* inmsg, int re){
 }
 
 
-void lockerInquiry(int connfd, int pwdLen, struct student *record) {
+void lockerInquiry(int connfd, int pwdLen, struct locker *locker) {
 	int menu;
-	char outmsg[MAXLINE], inmsg[MAXLINE];
+	char outmsg[MAXLINE], inmsg[MAXLINE];	
 	sprintf(outmsg, "-----사물함 관리-----\n1. 내 사물함 보기\n2. 물건 넣기\n3. 물건 빼기\n4. 사물함 반납\n5. 사물함 양도\n6. 비밀번호 변경\n");
 	writeInfo(connfd, outmsg, inmsg, 1);
 	menu = atoi(inmsg);
 	if(menu == 1) {
 		printf("내 사물함 보기\n");
-		sprintf(outmsg, "사물함 번호 : %d\t 남은 공간 : %d\n", record->myLocker.id, record->myLocker.cap);
+		sprintf(outmsg, "사물함 번호 : %d\t 남은 공간 : %d\n", locker->id, locker->cap);
 		writeInfo(connfd, outmsg, inmsg, 0);
 	} else if (menu == 2) { // insert mulgun
 		printf("물건 넣기\n");
 		int amount, temp;
 		writeInfo(connfd, "넣을 물건 개수 입력: ", inmsg, 1);
 		amount = atoi(inmsg);
-		temp = record->myLocker.cap - amount;
+		temp = locker->cap - amount;
 		if(temp < 0) {
-			sprintf(outmsg, "용량이 부족합니다. 남은 공간: %d\n", record->myLocker.cap);
+			sprintf(outmsg, "용량이 부족합니다. 남은 공간: %d\n", locker->cap);
 			writeInfo(connfd, outmsg, inmsg, 0);
 		} else {
-			record->myLocker.cap = temp;
-			sprintf(outmsg, "물건 넣기 성공. 남은 공간: %d\n", record->myLocker.cap);
+			locker->cap = temp;
+			sprintf(outmsg, "물건 넣기 성공. 남은 공간: %d\n", locker->cap);
 			writeInfo(connfd, outmsg, inmsg, 0);
 		}
 	} else if (menu == 3) { // mulgun out
@@ -173,18 +203,18 @@ void lockerInquiry(int connfd, int pwdLen, struct student *record) {
 		int amount, temp, originCap;
 		writeInfo(connfd, "뺼 물건 개수 입력: ", inmsg, 1);
 		amount = atoi(inmsg);
-		temp = amount + record->myLocker.cap;
-		if(record->myLocker.isBig) { //big locker
+		temp = amount + locker->cap;
+		if(locker->isBig) { //big locker
 			originCap = 10;
 		} else {
 			originCap = 5;
 		}
 		if(temp > originCap) {
-			sprintf(outmsg, "물건을 %d개 뺼 수 없습니다. 현재 물건 개수: %d\n", amount, originCap-record->myLocker.cap);
+			sprintf(outmsg, "물건을 %d개 뺼 수 없습니다. 현재 물건 개수: %d\n", amount, originCap-locker->cap);
 			writeInfo(connfd, outmsg, inmsg, 0);
 		} else {
-			record->myLocker.cap = temp;
-			sprintf(outmsg, "물건 %d개 빼기 성공. 남은 용량: %d\n", amount, record->myLocker.cap);
+			locker->cap = temp;
+			sprintf(outmsg, "물건 %d개 빼기 성공. 남은 용량: %d\n", amount, locker->cap);
 			writeInfo(connfd, outmsg, inmsg, 0);
 		}
 	} else if(menu == 4) {
@@ -207,15 +237,16 @@ void lockerInquiry(int connfd, int pwdLen, struct student *record) {
 	} else if (menu == 6) { // change pwd
 		printf("비밀번호 변경\n");
 		writeInfo(connfd, "현재 비밀번호 입력: ", inmsg, 1);
-		if(strcmp(record->myLocker.pwd, inmsg)==0) {
+		if(strcmp(locker->pwd, inmsg)==0) {
 			do{
-				writeInfo(connfd, "새 비밀번호 입력: ", inmsg, 1);
-				if(strlen(inmsg) != pwdLen) {
-					sprintf(outmsg, "비밀번호는 %d자리여야 합니다.\n",pwdLen);
+				writeInfo(connfd, "비밀번호 입력 : ", inmsg, 1);
+				if(strlen(inmsg)!=pwdLen){
+				       	sprintf(outmsg, "비밀번호는 %d자리여야 합니다.\n",pwdLen);
 					writeInfo(connfd, outmsg, inmsg, 0);
 				}
-			} while(strlen(inmsg)!=pwdLen);
-			strncpy(record->myLocker.pwd, inmsg, pwdLen);
+
+			}while(strlen(inmsg)!=pwdLen);
+			strncpy(locker->pwd, inmsg, pwdLen);
 			writeInfo(connfd, "비밀번호가 변경되었습니다.\n", inmsg, 0);
 		} else {
 			writeInfo(connfd, "비밀번호가 틀립니다.\n", inmsg, 0);
