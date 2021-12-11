@@ -94,6 +94,7 @@ int main(int argc, char *argv[]){
 				record.id = id;
 				writeInfo(connfd, "이름 : ", inmsg, 1);
 				strncpy(record.name, inmsg, 20);
+				record.lockerId = -1;
 				lseek(fd,(record.id-START_ID)*sizeof(record),SEEK_SET);
 				write(fd,&record,sizeof(record));
 			}else{
@@ -143,7 +144,16 @@ int main(int argc, char *argv[]){
 					writeInfo(connfd, "비밀번호 : ", inmsg, 1);
 
 					if(strcmp(locker[record.lockerId].pwd, inmsg)==0){
-						lockerInquiry(connfd, pwdLen, &locker[record.lockerId]);
+						n = lockerInquiry(connfd, pwdLen, &locker[record.lockerId]);
+						if(n){
+							record.lockerId = -1;
+							lseek(fd,-sizeof(record),SEEK_CUR);
+							write(fd,&record,sizeof(record));
+						}else{
+							lseek(lockfd, record.lockerId*sizeof(struct locker), SEEK_SET);
+							write(lockfd, &locker[record.lockerId], sizeof(struct locker));
+						}
+						
 
 					}else{
 						writeInfo(connfd, "비밀번호가 맞지않습니다.\n", inmsg, 0);
@@ -174,7 +184,7 @@ void writeInfo(int connfd, char* outmsg, char* inmsg, int re){
 }
 
 
-void lockerInquiry(int connfd, int pwdLen, struct locker *locker) {
+int lockerInquiry(int connfd, int pwdLen, struct locker *locker) {
 	int menu;
 	char outmsg[MAXLINE], inmsg[MAXLINE];	
 	sprintf(outmsg, "-----사물함 관리-----\n1. 내 사물함 보기\n2. 물건 넣기\n3. 물건 빼기\n4. 사물함 반납\n5. 사물함 양도\n6. 비밀번호 변경\n");
@@ -223,12 +233,12 @@ void lockerInquiry(int connfd, int pwdLen, struct locker *locker) {
 		writeInfo(connfd, "반납하시겠습니까? (예 : 1, 아니오 : 2)\n", inmsg, 1);
 		response = atoi(inmsg);
 		if(response == 1) {
-//			record.myLocker.pwd = NULL;
-//			record.myLocker.cap = 0;
-//			record.myLocker.wrongCnt = 0;
-//			record.myLocker.lockTime = 0;
-//			record.myLocker = NULL;
+			locker->pwd[0] = '\0';
+			locker->cap = 0;
+			locker->wrongCnt = 0;
+			locker->lockTime = 0;
 			writeInfo(connfd, "반납되었습니다.\n", inmsg, 0);
+			return 1;
 		} else {
 			writeInfo(connfd, "반납 취소되었습니다.\n", inmsg, 0);
 		}
