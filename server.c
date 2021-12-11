@@ -16,6 +16,8 @@ void writeInfo(int, char*, char*, int);
 void alarmHandler();
 int lockerInquiry(int, int,  int, struct locker*);
 
+int clientPid;
+
 int main(int argc, char *argv[]){
 	int fd, lockfd, listenfd, connfd, clientlen;
 	struct sockaddr_un serverUNIXaddr, clientUNIXaddr;
@@ -77,6 +79,10 @@ int main(int argc, char *argv[]){
 	while(1){
 		connfd = accept(listenfd, &clientUNIXaddr, &clientlen);
 		if(fork() == 0){
+			char pidmsg[6];
+			read(connfd, pidmsg, MAXLINE);
+			clientPid = atoi(pidmsg);
+			printf("clientPid: %d\n",clientPid);
 			if((fd = open("stdb", O_RDWR)) == -1){
                         	perror("stdb");
                         	exit(2);
@@ -135,27 +141,28 @@ int main(int argc, char *argv[]){
 								writeInfo(connfd, outmsg, inmsg,0);
 							}
 						}
-					}
-					writeInfo(connfd, "사물함 선택 : ", inmsg, 1);
-					lockerId = atoi(inmsg) - 1;
-					if(-1>=lockerId || lockerId >= lockerNum) {
-						writeInfo(connfd, "선택할 수 없는 번호입니다.\n", inmsg, 0);
-					} else {
-						do{
-							writeInfo(connfd, "비밀번호 입력 : ", inmsg, 1);
-							if(strlen(inmsg)!=pwdLen){
-								sprintf(outmsg, "비밀번호는 %d자리여야 합니다.\n",pwdLen);
-								writeInfo(connfd, outmsg, inmsg, 0);
-							}
-							
-						}while(strlen(inmsg)!=pwdLen);
-						strncpy(locker[lockerId].pwd, inmsg,pwdLen);
-						lseek(lockfd, lockerId*sizeof(struct locker),SEEK_SET);
-						write(lockfd, &locker[lockerId], sizeof(struct locker));
-						record.lockerId = lockerId;
-						lseek(fd,-sizeof(record),SEEK_CUR);
-						write(fd,&record,sizeof(record));
-						printf("%d\t %s\t %d\t %d\t %s\n",record.id, record.name, record.lockerId, locker[record.lockerId].id, locker[record.lockerId].pwd);
+						writeInfo(connfd, "사물함 선택 : ", inmsg, 1);
+	                    lockerId = atoi(inmsg) - 1;
+    	                if(-1>=lockerId || lockerId >= lockerNum) {
+        	                writeInfo(connfd, "선택할 수 없는 번호입니다.\n", inmsg, 0);
+            	        } else {
+                	        do{
+                    	        writeInfo(connfd, "비밀번호 입력 : ", inmsg, 1);
+                        	    if(strlen(inmsg)!=pwdLen){
+                            	    sprintf(outmsg, "비밀번호는 %d자리여야 합니다.\n",pwdLen);
+	                                writeInfo(connfd, outmsg, inmsg, 0);
+    	                        }
+
+	                        }while(strlen(inmsg)!=pwdLen);
+    	                    strncpy(locker[lockerId].pwd, inmsg,pwdLen);
+        	                lseek(lockfd, lockerId*sizeof(struct locker),SEEK_SET);
+            	            write(lockfd, &locker[lockerId], sizeof(struct locker));
+                	        record.lockerId = lockerId;
+                    	    lseek(fd,-sizeof(record),SEEK_CUR);
+                        	write(fd,&record,sizeof(record));
+                        	printf("%d\t %s\t %d\t %d\t %s\n",record.id, record.name, record.lockerId, locker[record.lockerId].id, locker[record.lockerId].pwd);
+                    	}
+
 					}
 				}else if (menu == 2){
 					printf("내 사물함 보기\n");
@@ -177,9 +184,9 @@ int main(int argc, char *argv[]){
                         	writeInfo(connfd, "비밀번호가 틀렸습니다.\n", inmsg, 0);
 							if(++locker[record.lockerId].wrongCnt >= 3) {
 								printf("enter lock\n");
-								writeInfo(connfd,"비밀번호 오류 횟수가 초과되었습니다. 10초간 로그인이 제한됩니다.\n", inmsg, 0);
-								alarm(10);
-								sleep(10);
+//								writeInfo(connfd,"비밀번호 오류 횟수가 초과되었습니다. 10초간 로그인이 제한됩니다.\n", inmsg, 0);
+								kill(clientPid, SIGTSTP);
+								alarm(10);	
 							}
 							lseek(lockfd, record.lockerId*sizeof(struct locker), SEEK_SET);
 							write(lockfd, &locker[record.lockerId], sizeof(struct locker));
@@ -213,6 +220,7 @@ void writeInfo(int connfd, char* outmsg, char* inmsg, int re){
 void alarmHandler()
 {
 	printf("Enter permit\n");
+	kill(clientPid, SIGCONT);
 }
 
 
@@ -320,6 +328,7 @@ int lockerInquiry(int connfd, int fd, int pwdLen, struct locker *locker) {
 				}while(strlen(inmsg)!=pwdLen);
 				strncpy(locker->pwd, inmsg, pwdLen);
 				writeInfo(connfd, "비밀번호가 변경되었습니다.\n", inmsg, 0);
+				return 0;
 			} else {
 				writeInfo(connfd, "비밀번호가 틀립니다.\n", inmsg, 0);
 			}

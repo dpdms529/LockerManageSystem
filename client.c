@@ -11,6 +11,10 @@
 
 int readLine(int, char *);
 void writeInfo(int, char*, char*);
+void stopHandler();
+void contHandler();
+
+
 
 int main() {
 	int clientfd, result;
@@ -26,6 +30,12 @@ int main() {
 		if (result == -1) sleep(1);
 	} while (result == -1);
 
+	int pid = getpid();
+	char mypid[6];
+	sprintf(mypid, "%d", pid);
+	write(clientfd, mypid, strlen(mypid)+1);
+	signal(SIGTSTP, stopHandler);
+	signal(SIGCONT, contHandler);
 	while(readLine(clientfd, inmsg)) {
 		writeInfo(clientfd, inmsg, outmsg);
 	}
@@ -50,5 +60,18 @@ void writeInfo(int clientfd, char* inmsg, char* outmsg){
 		write(clientfd, outmsg, strlen(outmsg)+1);
 	}else{
 		printf(inmsg);
+	}
+}
+
+void stopHandler() {
+		printf("signal sigstop\n");
+		pause();
+		while(getchar()!='\n'){
+		}
+}
+
+void contHandler() {
+	printf("signal sigcont\n");
+	while(getchar()!='\n'){
 	}
 }
