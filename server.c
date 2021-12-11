@@ -14,6 +14,7 @@
 
 void writeInfo(int, char*, char*, int);
 int lockerInquiry(int, int,  int, struct locker*);
+void update(int, int, int, struct student*, struct locker*);
 
 int main(int argc, char *argv[]){
 	int fd, lockfd, listenfd, connfd, clientlen;
@@ -108,21 +109,22 @@ int main(int argc, char *argv[]){
 			printf("%s님이 로그인했습니다\n",record.name);
 			printf("사물함 번호 : %d\n",record.lockerId);
 			while(1){
-				lseek(fd, (record.id-START_ID)*sizeof(record), SEEK_SET);
-				read(fd, &record, sizeof(record));
+//				lseek(fd, (record.id-START_ID)*sizeof(record), SEEK_SET);
+//				read(fd, &record, sizeof(record));
 
-				for(int i = 0;i<lockerNum;i++){
-                	                lseek(lockfd,i*sizeof(struct locker),SEEK_SET);
-        	                        n = read(lockfd, &locker[i], sizeof(struct locker));
-                        	        printf("%d %d %s\n", n, locker[i].id, locker[i].pwd);
-	                        }
+//				for(int i = 0;i<lockerNum;i++){
+//                	                lseek(lockfd,i*sizeof(struct locker),SEEK_SET);
+//        	                        n = read(lockfd, &locker[i], sizeof(struct locker));
+//                        	        printf("%d %d %s\n", n, locker[i].id, locker[i].pwd);
+//	                        }
 
-				printf("id : %d, name : %s, lockerId : %d\n", record.id, record.name, record.lockerId);
+//				printf("id : %d, name : %s, lockerId : %d\n", record.id, record.name, record.lockerId);
 
 				sprintf(outmsg, "-----메뉴-----\n 1. 사물함 신청\n 2. 내 사물함 보기\n 3. 종료\n");
 				writeInfo(connfd, outmsg, inmsg, 1);
 				menu = atoi(inmsg);
 				if(menu == 1){
+					update(fd, lockfd, lockerNum, &record, locker);
 					writeInfo(connfd,"사물함 신청\n",inmsg, 0);
 					for(int i = 0;i<lockerNum;i++){
 						sprintf(outmsg,"id : %d, is Big : %d, cap : %d\n", locker[i].id, locker[i].isBig, locker[i].cap);
@@ -146,6 +148,7 @@ int main(int argc, char *argv[]){
 					write(fd,&record,sizeof(record));
 					printf("%d\t %s\t %d\t %d\t %s\n",record.id, record.name, record.lockerId, locker[record.lockerId].id, locker[record.lockerId].pwd);
 				}else if (menu == 2){
+					update(fd, lockfd, lockerNum, &record, locker);
 					printf("내 사물함 보기\n");
 					writeInfo(connfd, "비밀번호 : ", inmsg, 1);
 
@@ -300,4 +303,21 @@ int lockerInquiry(int connfd, int fd, int pwdLen, struct locker *locker) {
 			return 0;
 		}
 	}
+}
+
+
+void update(int fd, int lockfd, int lockerNum, struct student* record, struct locker* locker){
+	int n;
+
+	lseek(fd, (record->id-START_ID)*sizeof(*record), SEEK_SET);
+        read(fd, record, sizeof(*record));
+
+	printf("id : %d, name : %s, lockerId : %d\n", record->id, record->name, record->lockerId);
+
+        for(int i = 0;i<lockerNum;i++){
+		lseek(lockfd,i*sizeof(struct locker),SEEK_SET);
+                n = read(lockfd, (locker+i), sizeof(struct locker));
+                printf("%d %d %s\n", n, (locker+i)->id, (locker+i)->pwd);
+        }
+
 }
