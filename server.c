@@ -10,9 +10,10 @@
 #include "student.h"
 #include "locker.h"
 #define DEFAULT_PROTOCOL 0
-#define MAXLINE 160
+#define MAXLINE 200
 
 void writeInfo(int, char*, char*, int);
+int lockerInquiry(int, int,  int, struct locker*);
 
 int main(int argc, char *argv[]){
 	int fd, lockfd, listenfd, connfd, clientlen;
@@ -40,13 +41,13 @@ int main(int argc, char *argv[]){
 	scanf("%d", &pwdLen);
 	printf("사물함 관리 시스템 시작\n");
 
-	if((fd = open(argv[1], O_CREAT|O_TRUNC, 0640))==-1){
-		perror(argv[1]);
+	if((fd = open("stdb", O_CREAT|O_TRUNC, 0640))==-1){
+		perror("stdb");
 		exit(2);
 	}
 	close(fd);
-	if((lockfd = open(argv[2], O_RDWR|O_CREAT, 0640)) == -1){
-		perror(argv[2]);
+	if((lockfd = open("lcdb", O_RDWR|O_CREAT, 0640)) == -1){
+		perror("lcdb");
 		exit(2);
 	}
 
@@ -74,9 +75,13 @@ int main(int argc, char *argv[]){
 	while(1){
 		connfd = accept(listenfd, &clientUNIXaddr, &clientlen);
 		if(fork() == 0){
-			if((fd = open(argv[1], O_RDWR)) == -1){
-                        	perror(argv[1]);
+			if((fd = open("stdb", O_RDWR)) == -1){
+                        	perror("stdb");
                         	exit(2);
+			}
+			if((lockfd = open("lcdb",O_RDWR)) == -1){
+				perror("lcdb");
+				exit(2);
 			}
 			
 			writeInfo(connfd, "학번 : ", inmsg, 1);
@@ -103,15 +108,16 @@ int main(int argc, char *argv[]){
 			printf("%s님이 로그인했습니다\n",record.name);
 			printf("사물함 번호 : %d\n",record.lockerId);
 			while(1){
-				if((lockfd = open(argv[2], O_RDWR)) == -1){
-					perror(argv[2]);
-					exit(2);
-				}
+				lseek(fd, (record.id-START_ID)*sizeof(record), SEEK_SET);
+				read(fd, &record, sizeof(record));
+
 				for(int i = 0;i<lockerNum;i++){
                 	                lseek(lockfd,i*sizeof(struct locker),SEEK_SET);
         	                        n = read(lockfd, &locker[i], sizeof(struct locker));
                         	        printf("%d %d %s\n", n, locker[i].id, locker[i].pwd);
 	                        }
+
+				printf("id : %d, name : %s, lockerId : %d\n", record.id, record.name, record.lockerId);
 
 				sprintf(outmsg, "-----메뉴-----\n 1. 사물함 신청\n 2. 내 사물함 보기\n 3. 종료\n");
 				writeInfo(connfd, outmsg, inmsg, 1);
@@ -144,14 +150,14 @@ int main(int argc, char *argv[]){
 					writeInfo(connfd, "비밀번호 : ", inmsg, 1);
 
 					if(strcmp(locker[record.lockerId].pwd, inmsg)==0){
-						n = lockerInquiry(connfd, pwdLen, &locker[record.lockerId]);
+						n = lockerInquiry(connfd, fd, pwdLen, &locker[record.lockerId]);
+						lseek(lockfd, record.lockerId*sizeof(struct locker), SEEK_SET);
+						write(lockfd, &locker[record.lockerId], sizeof(struct locker));
 						if(n){
 							record.lockerId = -1;
-							lseek(fd,-sizeof(record),SEEK_CUR);
+							lseek(fd,(record.id-START_ID)*sizeof(record),SEEK_SET);
 							write(fd,&record,sizeof(record));
-						}else{
-							lseek(lockfd, record.lockerId*sizeof(struct locker), SEEK_SET);
-							write(lockfd, &locker[record.lockerId], sizeof(struct locker));
+							printf("n : %d id : %d lockerId : %d\n", n, record.id, record.lockerId);
 						}
 
 					}else{
@@ -183,9 +189,10 @@ void writeInfo(int connfd, char* outmsg, char* inmsg, int re){
 }
 
 
-int lockerInquiry(int connfd, int pwdLen, struct locker *locker, int fd) {
-	int menu;
+int lockerInquiry(int connfd, int fd, int pwdLen, struct locker *locker) {
+	int menu,amount,temp,originCap,response;
 	char outmsg[MAXLINE], inmsg[MAXLINE];
+	struct student record;
 	while(1) {
 		sprintf(outmsg, "-----사물함 관리-----\n1. 내 사물함 보기\n2. 물건 넣기\n3. 물건 빼기\n4. 사물함 반납\n5. 사물함 양도\n6. 비밀번호 변경\n7. 이전으로\n");
 		writeInfo(connfd, outmsg, inmsg, 1);
@@ -196,7 +203,6 @@ int lockerInquiry(int connfd, int pwdLen, struct locker *locker, int fd) {
 			writeInfo(connfd, outmsg, inmsg, 0);
 		} else if (menu == 2) { // insert mulgun
 			printf("물건 넣기\n");
-			int amount, temp;
 			writeInfo(connfd, "넣을 물건 개수 입력: ", inmsg, 1);
 			amount = atoi(inmsg);
 			temp = locker->cap - amount;
@@ -210,7 +216,6 @@ int lockerInquiry(int connfd, int pwdLen, struct locker *locker, int fd) {
 			}
 		} else if (menu == 3) {
 			printf("물건 빼기\n");
-			int amount, temp, originCap;
 			writeInfo(connfd, "뺼 물건 개수 입력: ", inmsg, 1);
 			amount = atoi(inmsg);
 			temp = amount + locker->cap;
@@ -229,12 +234,11 @@ int lockerInquiry(int connfd, int pwdLen, struct locker *locker, int fd) {
 			}
 		} else if(menu == 4) {
 			printf("사물함 반납\n");
-			int response;
 			writeInfo(connfd, "반납하시겠습니까? (예 : 1, 아니오 : 2)\n", inmsg, 1);
 			response = atoi(inmsg);
 			if(response == 1) {
 				locker->pwd[0] = '\0';
-				if(lock->isBig == 1) {
+				if(locker->isBig == 1) {
 					locker->cap = 10;
 				} else {
 					locker->cap = 5;
@@ -247,9 +251,34 @@ int lockerInquiry(int connfd, int pwdLen, struct locker *locker, int fd) {
 			}
 		} else if (menu == 5) {
 			printf("사물함 양도\n");
-			wireInfo(connfd, "양도할 학생의 학번 입력: ", inmsg, 1);
-			
-			return 0;
+			lseek(fd,0,SEEK_SET);
+			int cnt = 0;
+			int n;
+			while(1){
+				n=read(fd, &record, sizeof(record));
+				if(n>0){
+					if(record.id !=0 && record.lockerId == -1){
+						sprintf(outmsg, "%d\n", record.id);
+						writeInfo(connfd, outmsg, inmsg, 0);
+						cnt++;
+					}
+				}else break;
+			}
+			printf("%d\n",n);
+			if(cnt>0){
+				writeInfo(connfd, "양도할 학생의 학번 입력: ", inmsg, 1);
+				response = atoi(inmsg);
+				printf("response : %d\n",response);
+				lseek(fd,(response-START_ID)*sizeof(record),SEEK_SET);
+				read(fd, &record, sizeof(record));
+				record.lockerId = locker->id - 1;
+				printf("record.id : %d lockerId : %d\n",record.id, record.lockerId);
+				lseek(fd,-sizeof(record),SEEK_CUR);
+				write(fd, &record, sizeof(record));
+				return 1;
+			}else{
+				writeInfo(connfd,"양도가능한 학생이 없습니다.\n",inmsg,0);
+			}
 		} else if (menu == 6) { // change pwd
 			printf("비밀번호 변경\n");
 			writeInfo(connfd, "현재 비밀번호 입력: ", inmsg, 1);
