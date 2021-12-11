@@ -13,6 +13,7 @@
 #define MAXLINE 200
 
 void writeInfo(int, char*, char*, int);
+void alarmHandler();
 
 int main(int argc, char *argv[]){
 	int fd, lockfd, listenfd, connfd, clientlen;
@@ -24,6 +25,7 @@ int main(int argc, char *argv[]){
 	char outmsg[MAXLINE], inmsg[MAXLINE];
 
 	signal(SIGCHLD, SIG_IGN);
+	signal(SIGALRM, alarmHandler);
 	clientlen = sizeof(clientUNIXaddr);
 
 	listenfd = socket(AF_UNIX, SOCK_STREAM, DEFAULT_PROTOCOL);
@@ -108,10 +110,10 @@ int main(int argc, char *argv[]){
 					exit(2);
 				}
 				for(int i = 0;i<lockerNum;i++){
-                	                lseek(lockfd,i*sizeof(struct locker),SEEK_SET);
-        	                        n = read(lockfd, &locker[i], sizeof(struct locker));
-                        	        printf("%d %d %s\n", n, locker[i].id, locker[i].pwd);
-	                        }
+					lseek(lockfd,i*sizeof(struct locker),SEEK_SET);
+        	        n = read(lockfd, &locker[i], sizeof(struct locker));
+                    printf("%d %d %s %d\n", n, locker[i].id, locker[i].pwd, locker[i].wrongCnt);
+				}
 
 				sprintf(outmsg, "-----메뉴-----\n 1. 사물함 신청\n 2. 내 사물함 보기\n 3. 종료\n");
 				writeInfo(connfd, outmsg, inmsg, 1);
@@ -156,18 +158,26 @@ int main(int argc, char *argv[]){
 					} else {
 						writeInfo(connfd, "비밀번호 : ", inmsg, 1);
 						if(strcmp(locker[record.lockerId].pwd, inmsg)==0){
-                        n = lockerInquiry(connfd, pwdLen, &locker[record.lockerId],fd);
-                        if(n){
-                            record.lockerId = -1;
-                            lseek(fd,-sizeof(record),SEEK_CUR);
-                            write(fd,&record,sizeof(record));
-                        }else{
-                            lseek(lockfd, record.lockerId*sizeof(struct locker), SEEK_SET);
-                            write(lockfd, &locker[record.lockerId], sizeof(struct locker));
-                        }
+                        	n = lockerInquiry(connfd, pwdLen, &locker[record.lockerId],fd);
+                        	if(n){
+                            	record.lockerId = -1;
+                            	lseek(fd,-sizeof(record),SEEK_CUR);
+                            	write(fd,&record,sizeof(record));
+                        	}else{
+                            	lseek(lockfd, record.lockerId*sizeof(struct locker), SEEK_SET);
+                            	write(lockfd, &locker[record.lockerId], sizeof(struct locker));
+							}
 
                     	}else{
-                        	writeInfo(connfd, "비밀번호가 맞지않습니다.\n", inmsg, 0);
+                        	writeInfo(connfd, "비밀번호가 틀렸습니다.\n", inmsg, 0);
+							if(++locker[record.lockerId].wrongCnt >= 3) {
+								printf("enter lock\n");
+								writeInfo(connfd,"비밀번호 오류 횟수가 초과되었습니다. 10초간 로그인이 제한됩니다.\n", inmsg, 0);
+								alarm(10);
+								sleep(10);
+							}
+							lseek(lockfd, record.lockerId*sizeof(struct locker), SEEK_SET);
+							write(lockfd, &locker[record.lockerId], sizeof(struct locker));
                     	}
 
 					}
@@ -194,6 +204,11 @@ void writeInfo(int connfd, char* outmsg, char* inmsg, int re){
 	}else{
 		write(connfd, outmsg, strlen(outmsg) + 1);
 	}
+}
+
+void alarmHandler()
+{
+	printf("Enter permit\n");
 }
 
 
