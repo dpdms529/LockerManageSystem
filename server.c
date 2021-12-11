@@ -8,18 +8,19 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include "student.h"
+#include "locker.h"
 #define DEFAULT_PROTOCOL 0
 #define MAXLINE 100
 
 void writeInfo(int, char*, char*, int);
 
 int main(int argc, char *argv[]){
-	int fd, listenfd, connfd, clientlen;
+	int fd, lockfd, listenfd, connfd, clientlen;
 	struct sockaddr_un serverUNIXaddr, clientUNIXaddr;
 	int lockerNum, bigNum, pwdLen;
 	struct student record;
 	struct locker * locker;
-	int id,menu,lockerId;
+	int id,menu,lockerId,n;
 	char outmsg[MAXLINE], inmsg[MAXLINE];
 
 	signal(SIGCHLD, SIG_IGN);
@@ -39,6 +40,16 @@ int main(int argc, char *argv[]){
 	scanf("%d", &pwdLen);
 	printf("사물함 관리 시스템 시작\n");
 
+	if((fd = open(argv[1], O_CREAT|O_TRUNC, 0640))==-1){
+		perror(argv[1]);
+		exit(2);
+	}
+	close(fd);
+	if((lockfd = open(argv[2], O_RDWR|O_CREAT, 0640)) == -1){
+		perror(argv[2]);
+		exit(2);
+	}
+
 	locker = (struct locker *)malloc(lockerNum * sizeof(struct locker));
 	for(int i = 0;i<lockerNum;i++){
 		locker[i].id = i+1;
@@ -49,21 +60,25 @@ int main(int argc, char *argv[]){
 			locker[i].isBig = 1;
 			locker[i].cap = 10;
 		}
-		locker[i].pwd = (char*)malloc(pwdLen*sizeof(char));
+		locker[i].pwd[0] = '\0';
 		locker[i].wrongCnt = 0;
 		locker[i].islock = 0;
 		locker[i].lockTime = 0;
+		lseek(lockfd,i*sizeof(struct locker),SEEK_SET);
+		write(lockfd,&locker[i],sizeof(struct locker));
 	}
+	close(lockfd);
 
 	listen(listenfd, 5);
 
 	while(1){
 		connfd = accept(listenfd, &clientUNIXaddr, &clientlen);
 		if(fork() == 0){
-			if((fd = open(argv[1], O_RDWR|O_CREAT, 0640)) == -1){
+			if((fd = open(argv[1], O_RDWR)) == -1){
                         	perror(argv[1]);
                         	exit(2);
 			}
+			
 			writeInfo(connfd, "학번 : ", inmsg, 1);
 			id = atoi(inmsg);
 			if(id < START_ID){
@@ -72,7 +87,7 @@ int main(int argc, char *argv[]){
 			}
 			printf("id : %d\n", id);
 			lseek(fd,(id-START_ID)*sizeof(record),SEEK_SET);
-			int n = read(fd, &record, sizeof(record));
+			n = read(fd, &record, sizeof(record));
 			printf("n : %d\n", n);
 			if(n<=0||record.id==0){
 				printf("norecord\n");
@@ -85,7 +100,18 @@ int main(int argc, char *argv[]){
 				printf("record : %d\t %s\n", record.id,record.name);
 			}
 			printf("%s님이 로그인했습니다\n",record.name);
+			printf("사물함 번호 : %d\n",record.lockerId);
 			while(1){
+				if((lockfd = open(argv[2], O_RDWR)) == -1){
+					perror(argv[2]);
+					exit(2);
+				}
+				for(int i = 0;i<lockerNum;i++){
+                	                lseek(lockfd,i*sizeof(struct locker),SEEK_SET);
+        	                        n = read(lockfd, &locker[i], sizeof(struct locker));
+                        	        printf("%d %d %s\n", n, locker[i].id, locker[i].pwd);
+	                        }
+
 				sprintf(outmsg, "-----메뉴-----\n 1. 사물함 신청\n 2. 내 사물함 보기\n 3. 종료\n");
 				writeInfo(connfd, outmsg, inmsg, 1);
 				menu = atoi(inmsg);
@@ -106,15 +132,17 @@ int main(int argc, char *argv[]){
 
 					}while(strlen(inmsg)!=pwdLen);
 					strncpy(locker[lockerId].pwd, inmsg,pwdLen);
-					record.myLocker = locker[lockerId];
+					lseek(lockfd, lockerId*sizeof(struct locker),SEEK_SET);
+					write(lockfd, &locker[lockerId], sizeof(struct locker));
+					record.lockerId = lockerId;
 					lseek(fd,-sizeof(record),SEEK_CUR);
 					write(fd,&record,sizeof(record));
-					printf("%d\t %s\t %d\t %s\n",record.id, record.name, record.myLocker.id, record.myLocker.pwd);
+					printf("%d\t %s\t %d\t %d\t %s\n",record.id, record.name, record.lockerId, locker[record.lockerId].id, locker[record.lockerId].pwd);
 				}else if (menu == 2){
 					printf("내 사물함 보기\n");
 					writeInfo(connfd, "비밀번호 : ", inmsg, 1);
-					if(strcmp(record.myLocker.pwd, inmsg)==0){
-						sprintf(outmsg, "사물함 번호 : %d\t 남은 공간 : %d\n", record.myLocker.id, record.myLocker.cap);
+					if(strcmp(locker[record.lockerId].pwd, inmsg)==0){
+						sprintf(outmsg, "사물함 번호 : %d\t 남은 공간 : %d\n", locker[record.lockerId].id, locker[record.lockerId].cap);
 						writeInfo(connfd, outmsg, inmsg, 0);
 
 					}else{
@@ -122,6 +150,7 @@ int main(int argc, char *argv[]){
 					}
 				}else if(menu == 3){
 					printf("%s님이 로그아웃했습니다\n", record.name);
+					close(lockfd);
 					close(fd);
 					exit(0);
 				}
