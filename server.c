@@ -143,7 +143,7 @@ int main(int argc, char *argv[]){
 					writeInfo(connfd, "비밀번호 : ", inmsg, 1);
 
 					if(strcmp(locker[record.lockerId].pwd, inmsg)==0){
-						lockerInquiry(connfd, pwdLen, &locker[record.lockerId]);
+						lockerInquiry(connfd, pwdLen, &locker[record.lockerId],fd);
 
 					}else{
 						writeInfo(connfd, "비밀번호가 맞지않습니다.\n", inmsg, 0);
@@ -174,82 +174,84 @@ void writeInfo(int connfd, char* outmsg, char* inmsg, int re){
 }
 
 
-void lockerInquiry(int connfd, int pwdLen, struct locker *locker) {
+int lockerInquiry(int connfd, int pwdLen, struct locker *locker, int fd) {
 	int menu;
-	char outmsg[MAXLINE], inmsg[MAXLINE];	
-	sprintf(outmsg, "-----사물함 관리-----\n1. 내 사물함 보기\n2. 물건 넣기\n3. 물건 빼기\n4. 사물함 반납\n5. 사물함 양도\n6. 비밀번호 변경\n");
-	writeInfo(connfd, outmsg, inmsg, 1);
-	menu = atoi(inmsg);
-	if(menu == 1) {
-		printf("내 사물함 보기\n");
-		sprintf(outmsg, "사물함 번호 : %d\t 남은 공간 : %d\n", locker->id, locker->cap);
-		writeInfo(connfd, outmsg, inmsg, 0);
-	} else if (menu == 2) { // insert mulgun
-		printf("물건 넣기\n");
-		int amount, temp;
-		writeInfo(connfd, "넣을 물건 개수 입력: ", inmsg, 1);
-		amount = atoi(inmsg);
-		temp = locker->cap - amount;
-		if(temp < 0) {
-			sprintf(outmsg, "용량이 부족합니다. 남은 공간: %d\n", locker->cap);
+	char outmsg[MAXLINE], inmsg[MAXLINE];
+	while(1) {
+		sprintf(outmsg, "-----사물함 관리-----\n1. 내 사물함 보기\n2. 물건 넣기\n3. 물건 빼기\n4. 사물함 반납\n5. 사물함 양도\n6. 비밀번호 변경\n7. 이전으로\n");
+		writeInfo(connfd, outmsg, inmsg, 1);
+		menu = atoi(inmsg);
+		if(menu == 1) {
+			printf("내 사물함 보기\n");
+			sprintf(outmsg, "사물함 번호 : %d\t 남은 공간 : %d\n", locker->id, locker->cap);
 			writeInfo(connfd, outmsg, inmsg, 0);
-		} else {
-			locker->cap = temp;
-			sprintf(outmsg, "물건 넣기 성공. 남은 공간: %d\n", locker->cap);
-			writeInfo(connfd, outmsg, inmsg, 0);
-		}
-	} else if (menu == 3) { // mulgun out
-		printf("물건 빼기\n");
-		int amount, temp, originCap;
-		writeInfo(connfd, "뺼 물건 개수 입력: ", inmsg, 1);
-		amount = atoi(inmsg);
-		temp = amount + locker->cap;
-		if(locker->isBig) { //big locker
-			originCap = 10;
-		} else {
-			originCap = 5;
-		}
-		if(temp > originCap) {
-			sprintf(outmsg, "물건을 %d개 뺼 수 없습니다. 현재 물건 개수: %d\n", amount, originCap-locker->cap);
-			writeInfo(connfd, outmsg, inmsg, 0);
-		} else {
-			locker->cap = temp;
-			sprintf(outmsg, "물건 %d개 빼기 성공. 남은 용량: %d\n", amount, locker->cap);
-			writeInfo(connfd, outmsg, inmsg, 0);
-		}
-	} else if(menu == 4) {
-		printf("사물함 반납\n");
-		int response;
-		writeInfo(connfd, "반납하시겠습니까? (예 : 1, 아니오 : 2)\n", inmsg, 1);
-		response = atoi(inmsg);
-		if(response == 1) {
-//			record.myLocker.pwd = NULL;
-//			record.myLocker.cap = 0;
-//			record.myLocker.wrongCnt = 0;
-//			record.myLocker.lockTime = 0;
-//			record.myLocker = NULL;
-			writeInfo(connfd, "반납되었습니다.\n", inmsg, 0);
-		} else {
-			writeInfo(connfd, "반납 취소되었습니다.\n", inmsg, 0);
-		}
-	} else if (menu == 5) { // transfer
-		printf("사물함 양도\n");
-	} else if (menu == 6) { // change pwd
-		printf("비밀번호 변경\n");
-		writeInfo(connfd, "현재 비밀번호 입력: ", inmsg, 1);
-		if(strcmp(locker->pwd, inmsg)==0) {
-			do{
-				writeInfo(connfd, "비밀번호 입력 : ", inmsg, 1);
-				if(strlen(inmsg)!=pwdLen){
-				       	sprintf(outmsg, "비밀번호는 %d자리여야 합니다.\n",pwdLen);
-					writeInfo(connfd, outmsg, inmsg, 0);
-				}
+		} else if (menu == 2) { // insert mulgun
+			printf("물건 넣기\n");
+			int amount, temp;
+			writeInfo(connfd, "넣을 물건 개수 입력: ", inmsg, 1);
+			amount = atoi(inmsg);
+			temp = locker->cap - amount;
+			if(temp < 0) {
+				sprintf(outmsg, "용량이 부족합니다. 남은 공간: %d\n", locker->cap);
+				writeInfo(connfd, outmsg, inmsg, 0);
+			} else {
+				locker->cap = temp;
+				sprintf(outmsg, "물건 넣기 성공. 남은 공간: %d\n", locker->cap);
+				writeInfo(connfd, outmsg, inmsg, 0);
+			}
+		} else if (menu == 3) {
+			printf("물건 빼기\n");
+			int amount, temp, originCap;
+			writeInfo(connfd, "뺼 물건 개수 입력: ", inmsg, 1);
+			amount = atoi(inmsg);
+			temp = amount + locker->cap;
+			if(locker->isBig) { //big locker
+				originCap = 10;
+			} else {
+				originCap = 5;
+			}
+			if(temp > originCap) {
+				sprintf(outmsg, "물건을 %d개 뺼 수 없습니다. 현재 물건 개수: %d\n", amount, originCap-locker->cap);
+				writeInfo(connfd, outmsg, inmsg, 0);
+			} else {
+				locker->cap = temp;
+				sprintf(outmsg, "물건 %d개 빼기 성공. 남은 용량: %d\n", amount, locker->cap);
+				writeInfo(connfd, outmsg, inmsg, 0);
+			}
+		} else if(menu == 4) {
+			printf("사물함 반납\n");
+			int response;
+			writeInfo(connfd, "반납하시겠습니까? (예 : 1, 아니오 : 2)\n", inmsg, 1);
+			response = atoi(inmsg);
+			if(response == 1) {
+				return 1;
+			} else {
+				writeInfo(connfd, "반납 취소되었습니다.\n", inmsg, 0);
+			}
+		} else if (menu == 5) {
+			printf("사물함 양도\n");
+			wireInfo(connfd, "양도할 학생의 학번 입력: ", inmsg, 1);
+			
+			return 0;
+		} else if (menu == 6) { // change pwd
+			printf("비밀번호 변경\n");
+			writeInfo(connfd, "현재 비밀번호 입력: ", inmsg, 1);
+			if(strcmp(locker->pwd, inmsg)==0) {
+				do{
+					writeInfo(connfd, "비밀번호 입력 : ", inmsg, 1);
+					if(strlen(inmsg)!=pwdLen){
+					       	sprintf(outmsg, "비밀번호는 %d자리여야 합니다.\n",pwdLen);
+						writeInfo(connfd, outmsg, inmsg, 0);
+					}
 
-			}while(strlen(inmsg)!=pwdLen);
-			strncpy(locker->pwd, inmsg, pwdLen);
-			writeInfo(connfd, "비밀번호가 변경되었습니다.\n", inmsg, 0);
-		} else {
-			writeInfo(connfd, "비밀번호가 틀립니다.\n", inmsg, 0);
+				}while(strlen(inmsg)!=pwdLen);
+				strncpy(locker->pwd, inmsg, pwdLen);
+				writeInfo(connfd, "비밀번호가 변경되었습니다.\n", inmsg, 0);
+			} else {
+				writeInfo(connfd, "비밀번호가 틀립니다.\n", inmsg, 0);
+			}
+		} else if(menu == 7) {
+			return 0;
 		}
 	}
 }
