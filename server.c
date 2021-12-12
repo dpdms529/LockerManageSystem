@@ -13,11 +13,9 @@
 #define MAXLINE 200
 
 void writeInfo(int, char*, char*, int);
-void alarmHandler();
 int lockerInquiry(int, int,  int, struct locker*);
 void update(int, int, int, struct student*, struct locker*);
 int readLine(int, char*);
-int clientPid;
 
 int main(int argc, char *argv[]){
 	int fd, lockfd, listenfd, connfd, clientlen;
@@ -28,8 +26,6 @@ int main(int argc, char *argv[]){
 	int id,menu,lockerId,n;
 	char outmsg[MAXLINE], inmsg[MAXLINE];
 
-	signal(SIGCHLD, SIG_IGN);
-	signal(SIGALRM, alarmHandler);
 	clientlen = sizeof(clientUNIXaddr);
 
 	listenfd = socket(AF_UNIX, SOCK_STREAM, DEFAULT_PROTOCOL);
@@ -84,10 +80,6 @@ int main(int argc, char *argv[]){
 	while(1){
 		connfd = accept(listenfd, &clientUNIXaddr, &clientlen);
 		if(fork() == 0){
-			char pidmsg[6];
-			read(connfd, pidmsg, MAXLINE);
-			clientPid = atoi(pidmsg);
-			printf("clientPid: %d\n",clientPid);
 			if((fd = open("stdb", O_RDWR)) == -1){
                         	perror("stdb");
                         	exit(2);
@@ -178,17 +170,16 @@ int main(int argc, char *argv[]){
                     					}else{
                         					writeInfo(connfd, "비밀번호가 틀렸습니다.\n", inmsg, 0);
 								if(++locker[record.lockerId].wrongCnt >= 3) {
-									printf("enter lock\n");
-//									writeInfo(connfd,"비밀번호 오류 횟수가 초과되었습니다. 10초간 로그인이 제한됩니다.\n", inmsg, 0);
-									//kill(clientPid, SIGTSTP);
-									alarm(10);
+									printf("%d: 입력 제한\n", id);
+									writeInfo(connfd, "비밀번호 입력 횟수를 초과했습니다. 10초간 입력이 제한됩니다.\n", inmsg, 0);
 									int cnt = 10;
 									while(cnt!=0){
-										sprintf(outmsg,"wait : %d초\n",cnt);
+										sprintf(outmsg,"입력 제한 %d초 남음\n",cnt);
 										writeInfo(connfd,outmsg,inmsg,0);
 										sleep(1);
 										cnt--;
 									}
+									printf("%d: 입력 제한 해제\n", record.id);
 									locker[record.lockerId].wrongCnt = 0;
 								}
 
@@ -201,6 +192,8 @@ int main(int argc, char *argv[]){
 					close(lockfd);
 					close(fd);
 					exit(0);
+				} else {
+					writeInfo(connfd, "1~3 사이의 숫자를 입력해 주세요.\n", inmsg, 0);
 				}
 			}
 
@@ -232,13 +225,6 @@ void writeInfo(int connfd, char* outmsg, char* inmsg, int re){
 	}
 }
 
-void alarmHandler()
-{
-	printf("\n제한 해제\n");
-
-}
-
-
 int lockerInquiry(int connfd, int fd, int pwdLen, struct locker *locker) {
 	int menu,amount,temp,originCap,response;
 	char outmsg[MAXLINE], inmsg[MAXLINE];
@@ -251,7 +237,7 @@ int lockerInquiry(int connfd, int fd, int pwdLen, struct locker *locker) {
 			printf("\n%d : 내 사물함 보기\n", locker->id);
 			sprintf(outmsg, "사물함 번호 : %d\t 남은 공간 : %d\n", locker->id, locker->cap);
 			writeInfo(connfd, outmsg, inmsg, 0);
-		} else if (menu == 2) { // insert mulgun
+		} else if (menu == 2) {
 			printf("\n%d : 물건 넣기\n", locker->id);
 			writeInfo(connfd, "넣을 물건 개수 입력: ", inmsg, 1);
 			amount = atoi(inmsg);
@@ -269,7 +255,7 @@ int lockerInquiry(int connfd, int fd, int pwdLen, struct locker *locker) {
 			writeInfo(connfd, "뺼 물건 개수 입력: ", inmsg, 1);
 			amount = atoi(inmsg);
 			temp = amount + locker->cap;
-			if(locker->isBig) { //big locker
+			if(locker->isBig) {
 				originCap = 10;
 			} else {
 				originCap = 5;
@@ -348,6 +334,8 @@ int lockerInquiry(int connfd, int fd, int pwdLen, struct locker *locker) {
 			}
 		} else if(menu == 7) {
 			return 0;
+		} else {
+			writeInfo(connfd, "1~7 사이의 숫자를 입력해 주세요.\n", inmsg, 0);
 		}
 	}
 }
