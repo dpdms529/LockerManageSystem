@@ -129,27 +129,28 @@ int main(int argc, char *argv[]){
 								writeInfo(connfd, outmsg, inmsg,0);
 							}
 						}
-					}
-					writeInfo(connfd, "\n사물함 선택 : ", inmsg, 1);
-					lockerId = atoi(inmsg) - 1;
-					if(-1>=lockerId || lockerId >= lockerNum) {
-						writeInfo(connfd, "선택할 수 없는 번호입니다.\n", inmsg, 0);
-					} else {
-						do{
-							writeInfo(connfd, "비밀번호 입력 : ", inmsg, 1);
-							if(strlen(inmsg)!=pwdLen){
-								sprintf(outmsg, "비밀번호는 %d자리여야 합니다.\n",pwdLen);
-								writeInfo(connfd, outmsg, inmsg, 0);
-							}
-							
-						}while(strlen(inmsg)!=pwdLen);
-						strncpy(locker[lockerId].pwd, inmsg,pwdLen);
-						lseek(lockfd, lockerId*sizeof(struct locker),SEEK_SET);
-						write(lockfd, &locker[lockerId], sizeof(struct locker));
-						record.lockerId = lockerId;
-						lseek(fd,-sizeof(record),SEEK_CUR);
-						write(fd,&record,sizeof(record));
-						printf("%d\t %s\t %d\t %d\t %s\n",record.id, record.name, record.lockerId, locker[record.lockerId].id, locker[record.lockerId].pwd);
+						writeInfo(connfd, "\n사물함 선택 : ", inmsg, 1);
+                   		lockerId = atoi(inmsg) - 1;
+                   		if(-1>=lockerId || lockerId >= lockerNum) {
+	                        writeInfo(connfd, "선택할 수 없는 번호입니다.\n", inmsg, 0);
+    	                } else {
+        	                do{
+            	                writeInfo(connfd, "비밀번호 입력 : ", inmsg, 1);
+                	            if(strlen(inmsg)!=pwdLen){
+                    	            sprintf(outmsg, "비밀번호는 %d자리여야 합니다.\n",pwdLen);
+                        	        writeInfo(connfd, outmsg, inmsg, 0);
+                            	}
+
+	                        }while(strlen(inmsg)!=pwdLen);
+    	                    strncpy(locker[lockerId].pwd, inmsg,pwdLen);
+        	                lseek(lockfd, lockerId*sizeof(struct locker),SEEK_SET);
+            	            write(lockfd, &locker[lockerId], sizeof(struct locker));
+                	        record.lockerId = lockerId;
+                    	    lseek(fd,-sizeof(record),SEEK_CUR);
+                        	write(fd,&record,sizeof(record));
+  	                      printf("%d\t %s\t %d\t %d\t %s\n",record.id, record.name, record.lockerId, locker[record.lockerId].id, locker[record.lockerId].pwd);
+    	                }
+
 					}
 				}else if (menu == 2){
 					update(fd, lockfd, lockerNum, &record, locker);
