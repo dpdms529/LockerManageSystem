@@ -175,10 +175,11 @@ Server
 - 신청 가능한 사물함 정보 목록을 출력
 - 사물함을 선택하면 비밀번호 설정 후 사물함 할당
     - 비밀번호 확인시 strncmp함수를 사용하여 입력한 문자가 설정된 자릿수까지는 맞고 그 뒷자리 문자부터 다른경우 비밀번호가 맞다고 처리하는 오류 존재 → strcmp함수를 사용해야 함
-![Untitled 6](https://user-images.githubusercontent.com/60471550/154383741-d2edc380-bb62-4df4-b272-2717f4a1a01b.png)
+    
+	![Untitled 6](https://user-images.githubusercontent.com/60471550/154383741-d2edc380-bb62-4df4-b272-2717f4a1a01b.png)
 
-![Untitled 7](https://user-images.githubusercontent.com/60471550/154383762-b2d58272-9151-4b9e-a3fe-87b75798fc39.png)
-Server
+	![Untitled 7](https://user-images.githubusercontent.com/60471550/154383762-b2d58272-9151-4b9e-a3fe-87b75798fc39.png)
+	Server
 
 cf) locker 구조체의 사물함 번호에는 사물함 배열 index + 1, student 구조체의 사물함 번호에는 사물함 배열 index가 저장되어 있음
 
